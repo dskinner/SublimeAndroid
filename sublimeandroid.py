@@ -40,7 +40,12 @@ class SublimeAndroidXmlComplete(sublime_plugin.EventListener):
 		if self.dirty:
 			# dont reset dirty here as it prevents final autocompletion in a somewhat
 			# bizarre manner.
-			view.run_command('auto_complete')
+			view.run_command("auto_complete")
+			return
+
+		sel = view.sel()[0]
+		if view.substr(sel.a - 1) in ["<", ":"]:
+			view.run_command("auto_complete")
 
 	def get_setting(self, key, default=None):
 		try:
