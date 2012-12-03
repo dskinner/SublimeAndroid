@@ -4,11 +4,146 @@ from xml.etree import ElementTree as ET
 import re
 import os.path
 
+_settings = None
+_android_project_path = None
+
+
+def get_setting(key, default=None):
+	global _settings
+	try:
+		s = sublime.active_window().active_view().settings()
+		if s.has(key):
+			return s.get(key)
+	except:
+		pass
+	if _settings is None:
+		_settings = sublime.load_settings("SublimeAndroid.sublime-settings")
+	return _settings.get(key, default)
+
+
+def is_android_project():
+	'''flukey check'''
+	get_android_project_path()
+	if _android_project_path is None:
+		return False
+	return True
+
+
+def get_android_project_path():
+	'''
+	sublime projects may contain multiple folders, this returns the one
+	containing the root of an android project
+	'''
+	global _android_project_path
+	if _android_project_path is not None:
+		return _android_project_path
+
+	p = get_setting("sublimeandroid_project_path", "")
+
+	# inspect project folders to locate root
+	# BUG this could be buggy if tests are including in project root but sublime allows you
+	# to add a subfolder of a project folder as another project folder. (phew!)
+	if not p:
+		folders = sublime.active_window().folders()
+		for folder in folders:
+			a = os.path.join(folder, "local.properties")
+			b = os.path.join(folder, "project.properties")
+			if os.path.isfile(a) and os.path.isfile(b):
+				_android_project_path = folder
+				return folder
+		if not p:
+			# TODO throw notification that no folders appear to be proper android projects
+			return
+
+
+def get_classpaths():
+	classpaths = []
+	p = get_android_project_path()
+	sdk_dir = get_sdk_dir()
+	target_platform = get_target_platform()
+
+	classpaths = [
+		os.path.join(sdk_dir, "platforms", target_platform, "android.jar"),
+		os.path.join(p, "bin", "classes"),
+		os.path.join(p, "gen"),
+		os.path.join(p, "libs", "*")
+	]
+
+	for lib in get_android_libs():
+		classpaths.append(os.path.join(p, lib, "bin", "classes"))
+		classpaths.append(os.path.join(p, lib, "gen"))
+		classpaths.append(os.path.join(p, lib, "libs", "*"))
+
+	return classpaths
+
+
+def get_srcpaths():
+	p = get_android_project_path()
+	srcpaths = [os.path.join(p, "src")]
+	for lib in get_android_libs():
+		srcpaths.append(os.path.join(p, lib, "src"))
+	return srcpaths
+
+
+def get_sdk_dir():
+	get_android_libs()
+	p = get_android_project_path()
+	f = open(os.path.join(p, "local.properties"))
+	s = f.read()
+	f.close()
+	return re.search("^sdk\.dir=(.*)\n", s, re.MULTILINE).groups()[0]
+
+
+def get_target_platform():
+	p = get_android_project_path()
+	f = open(os.path.join(p, "project.properties"))
+	s = f.read()
+	f.close()
+	return re.search("^target=(.*)\n", s, re.MULTILINE).groups()[0]
+
+
+def get_android_libs():
+	'''returns list of referenced libs in project.properties'''
+	p = get_android_project_path()
+	f = open(os.path.join(p, "project.properties"))
+	s = f.read()
+	f.close()
+	return re.findall("^android\.library\.reference.*=(.*)", s, re.MULTILINE)
+
+
+class SublimeAndroid(sublime_plugin.EventListener):
+	'''
+	Automatically load settings for SublimeJava, SublimeLinter, ...
+	'''
+	def on_load(self, view):
+		if not is_android_project():
+			return
+
+		settings = view.settings()
+		# SublimeJava
+		settings.set("sublimejava_classpath", get_classpaths())
+		settings.set("sublimejava_srcpath", get_srcpaths())
+		# SublimeLinter
+		java = {
+			"working_directory": get_android_project_path(),
+			"lint_args": [
+				"-sourcepath", "src",
+				"-classpath", ":".join(get_classpaths()),
+				"-Xlint",
+				"{filename}"
+			]
+		}
+		linter = settings.get("SublimeLinter")
+		if linter is None:
+			linter = {"Java": java}
+		else:
+			linter["Java"] = java
+		settings.set("SublimeLinter", linter)
+
 
 class SublimeAndroidXmlComplete(sublime_plugin.EventListener):
 	def __init__(self):
-		self.dirty = 0
-		self.settings = sublime.load_settings("SublimeAndroid.sublime-settings")
+		self.dirty = False
 
 	def on_query_completions(self, view, prefix, locations):
 		if not self.is_responsible(view):
@@ -94,15 +229,6 @@ class SublimeAndroidXmlComplete(sublime_plugin.EventListener):
 
 		return False
 
-	def get_setting(self, key, default=None):
-		try:
-			s = sublime.active_window().active_view().settings()
-			if s.has(key):
-				return s.get(key)
-		except:
-			pass
-		return self.settings.get(key, default)
-
 	def load_widgets(self, sdk_dir, platform):
 		self.widgets = {}
 		lines = open(os.path.join(sdk_dir, "platforms", platform, "data/widgets.txt"), "rt").readlines()
@@ -112,31 +238,8 @@ class SublimeAndroidXmlComplete(sublime_plugin.EventListener):
 
 	def load_lookup(self):
 		self.lookup = {}  # prevents recursive calls (i guess) due to how things currently are
-		sdk_dir = ""
-		platform = ""
-
-		p = self.get_setting("sublimeandroid_project_path", "")
-
-		# inspect project folders to locate root
-		# BUG this could be buggy if tests are including in project root but sublime allows you
-		# to add a subfolder of a project folder as another project folder. (phew!)
-		if not p:
-			folders = sublime.active_window().folders()
-			for folder in folders:
-				a = os.path.join(folder, "local.properties")
-				b = os.path.join(folder, "project.properties")
-				if os.path.isfile(a) and os.path.isfile(b):
-					p = folder
-					break
-			if not p:
-				return
-
-		f = open(os.path.join(p, "local.properties"))
-		sdk_dir = self.parse_sdk_dir(f.read())
-		f.close()
-		f = open(os.path.join(p, "project.properties"))
-		platform = self.parse_platform(f.read())
-		f.close()
+		sdk_dir = get_sdk_dir()
+		platform = get_target_platform()
 
 		self.load_widgets(sdk_dir, platform)
 
@@ -159,9 +262,3 @@ class SublimeAndroidXmlComplete(sublime_plugin.EventListener):
 				attrs[attr_name] = options
 
 			self.lookup[name] = attrs
-
-	def parse_sdk_dir(self, s):
-		return re.search("^sdk\.dir=(.*)\n", s, re.MULTILINE).groups()[0]
-
-	def parse_platform(self, s):
-		return re.search("^target=(.*)\n", s, re.MULTILINE).groups()[0]
