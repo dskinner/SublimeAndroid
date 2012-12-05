@@ -1,6 +1,15 @@
 {
-	//
+	// Manual override for project path, normally autodetected
 	"sublimeandroid_project_path": "",
+
+	// Automatically loads settings for external packages at appropriate times to keep
+	// autocompletion and lint fresh.
 	"sublimeandroid_auto_load_settings": true,
-	"sublimeandroid_auto_build": true
+
+	// Builds project in background on save to keep autocompletion and lint fresh.
+	"sublimeandroid_auto_build": true,
+
+	// For commands requiring a device selection and only one device is attached,
+	// select it without prompt.
+	"sublimeandroid_device_select_default": true
 }

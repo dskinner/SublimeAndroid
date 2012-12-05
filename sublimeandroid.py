@@ -250,6 +250,7 @@ def load_settings(view):
 	java = {
 		"working_directory": get_android_project_path(),
 		"lint_args": [
+			"-d", "bin/classes",
 			"-sourcepath", "src",
 			"-classpath", ":".join(get_classpaths()),
 			"-Xlint",
@@ -314,8 +315,8 @@ class AndroidAntRunCommand(sublime_plugin.WindowCommand):
 
 		if len(options) == 0:
 			sublime.status_message("ADB: No device attached!")
-		elif len(options) == 1:  # TODO and get_setting("device_auto_select"):
-			self.done(0)  # run default
+		elif len(options) == 1 and get_setting("sublimeandroid_device_select_default", True):
+			self.on_done(0)  # run default
 		else:
 			self.window.show_quick_panel(options, self.on_done)
 
