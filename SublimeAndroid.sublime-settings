@@ -1,4 +1,6 @@
 {
 	//
-	"sublimeandroid_project_path": ""
+	"sublimeandroid_project_path": "",
+	"sublimeandroid_auto_load_settings": true,
+	"sublimeandroid_auto_build": true
 }

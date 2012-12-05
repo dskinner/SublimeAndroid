@@ -1,0 +1,14 @@
+[
+	{
+		"caption": "Android: Build",
+		"command": "android_ant_build"
+	},
+	{
+		"caption": "Android: Run",
+		"command": "android_ant_run"
+	},
+	{
+		"caption": "Android: Reload Settings",
+		"command": "sublime_android_load_settings"
+	}
+]
