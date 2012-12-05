@@ -2,6 +2,7 @@ import os.path
 import re
 import subprocess
 import telnetlib
+import threading
 import traceback
 from xml.etree import ElementTree as ET
 
@@ -222,7 +223,7 @@ def get_adb_devices():
 	return devices, options
 
 
-def load_settings(self, view):
+def load_settings(view):
 	"""Automatically load settings for external packages.
 
 	Currently configures the following packages:
@@ -263,11 +264,22 @@ def load_settings(self, view):
 	settings.set("SublimeLinter", linter)
 
 
-def auto_build():
-	if not get_setting("sublimeandroid_auto_build"):
+def auto_build(view):
+	if not is_android_project():
 		return
 
-	# TODO
+	if not get_setting("sublimeandroid_auto_build", True):
+		return
+
+	build_xml = os.path.join(get_android_project_path(), "build.xml")
+	p = subprocess.Popen(["ant", "-f", build_xml, "debug"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE)
+	view.set_status("SublimeAndroid", "Android: Building Project")
+
+	def wait(p, view):
+		p.wait()
+		view.erase_status("SublimeAndroid")
+
+	threading.Thread(target=wait, args=(p, view)).start()
 
 
 class SublimeAndroidAuto(sublime_plugin.EventListener):
@@ -282,7 +294,7 @@ class SublimeAndroidAuto(sublime_plugin.EventListener):
 		load_settings(view)
 
 	def on_post_save(self, view):
-		auto_build()
+		auto_build(view)
 		load_settings(view)
 
 
