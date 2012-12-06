@@ -1,3 +1,4 @@
+import logging
 import os.path
 import re
 import subprocess
@@ -9,17 +10,11 @@ from xml.etree import ElementTree as ET
 import sublime
 import sublime_plugin
 
-DEBUG = True
+logging.basicConfig(format="SublimeAndroid %(levelname)s: %(message)s", level=logging.INFO)
 
 _settings = None
 _android_project_path = None
 _notified_missing_plugins = False
-
-
-def log(*args):
-	if not DEBUG:
-		return
-	print " ".join(args)
 
 
 def get_setting(key, default=None):
@@ -43,8 +38,9 @@ def is_android_project():
 	Returns:
 		bool
 	"""
-	get_android_project_path()
-	if _android_project_path is None:
+	p = get_android_project_path()
+	if p is None:
+		logging.info("Could not locate android project.")
 		return False
 	return True
 
@@ -59,6 +55,23 @@ def get_android_project_path():
 	Returns:
 		String pointing to absolute path of android project root.
 	"""
+	logging.info("Searching for project path.")
+
+	# Use active file to traverse upwards and locate project
+	view = sublime.active_window().active_view()
+	logging.info("Received view: %s", view)
+	if view is not None:
+		file_name = view.file_name()
+		logging.info("Received file_name: %s", file_name)
+		if file_name:
+			dir_name = os.path.dirname(file_name)
+			while dir_name != "/":
+				logging.info("Checking for AndroidManifest.xml in %s", dir_name)
+				if os.path.isfile(os.path.join(dir_name, "AndroidManifest.xml")):
+					return dir_name
+				dir_name = os.path.abspath(os.path.join(dir_name, ".."))
+
+	#
 	global _android_project_path
 	if _android_project_path is not None:
 		return _android_project_path
@@ -134,6 +147,9 @@ def get_srcpaths():
 
 
 def get_sdk_dir():
+	sdk_dir = get_setting("sublimeandroid_sdk_dir", "")
+	if sdk_dir:
+		return sdk_dir
 	get_android_libs()
 	p = get_android_project_path()
 	f = open(os.path.join(p, "local.properties"))
@@ -283,6 +299,15 @@ def auto_build(view):
 	threading.Thread(target=wait, args=(p, view)).start()
 
 
+def exec_sdk_tool(cmd=[], panel=False):
+	cmd[0] = os.path.join(get_sdk_dir(), "tools", cmd[0])
+	if panel:
+		sublime.active_window().run_command("exec", {"cmd": cmd})
+	else:
+		logging.info("executing sdk tool: %s", " ".join(cmd))
+		subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+
 class SublimeAndroidAuto(sublime_plugin.EventListener):
 	"""EventListener to handle enabled automatic events.
 
@@ -302,6 +327,31 @@ class SublimeAndroidAuto(sublime_plugin.EventListener):
 class SublimeAndroidLoadSettingsCommand(sublime_plugin.WindowCommand):
 	def run(self):
 		load_settings(sublime_plugin.active_window().active_view())
+
+
+class AndroidAvdManagerCommand(sublime_plugin.WindowCommand):
+	def run(self):
+		exec_sdk_tool(cmd=["android", "avd"])
+
+
+class AndroidSdkManagerCommand(sublime_plugin.WindowCommand):
+	def run(self):
+		exec_sdk_tool(cmd=["android", "sdk"])
+
+
+class AndroidMonitorCommand(sublime_plugin.WindowCommand):
+	def run(self):
+		exec_sdk_tool(cmd=["monitor"])
+
+
+class AndroidDrawNinePatchCommand(sublime_plugin.WindowCommand):
+	def run(self):
+		exec_sdk_tool(cmd=["draw9patch"])
+
+
+class AndroidUpdateProjectCommand(sublime_plugin.WindowCommand):
+	def run(self):
+		exec_sdk_tool(cmd=["android", "update", "project", "-p", get_android_project_path()], panel=True)
 
 
 class AndroidAntRunCommand(sublime_plugin.WindowCommand):
@@ -335,7 +385,7 @@ class AndroidAntRunCommand(sublime_plugin.WindowCommand):
 				break
 
 		if apk is None:
-			log("failed to locate apk to install")
+			logging.error("failed to locate apk to install")
 			return
 
 		activity = get_android_activity_main()
@@ -389,7 +439,7 @@ class AndroidAntBuildCommand(sublime_plugin.WindowCommand):
 			A dict containing keys of all ANT targets and values being the target's
 			description.
 		"""
-		log("checking path:", path)
+		logging.info("checking path:", path)
 		# return in cases where path is not valid. this may occur when the build.xml
 		# stubs imports for custom rules that may not have been implemented.
 		if not os.path.isfile(path):
@@ -414,7 +464,7 @@ class AndroidAntBuildCommand(sublime_plugin.WindowCommand):
 			#
 			# TODO should load property files for more complex build.xml files
 			# to determine appropriate paths with referenced ant vars.
-			log("found import with file attr:", f)
+			logging.info("found import with file attr:", f)
 			if f.startswith("${sdk.dir"):
 				f = f.replace("${sdk.dir}", get_sdk_dir())
 

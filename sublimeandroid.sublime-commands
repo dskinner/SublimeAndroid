@@ -8,6 +8,26 @@
 		"command": "android_ant_run"
 	},
 	{
+		"caption": "Android: AVD Manager",
+		"command": "android_avd_manager"
+	},
+	{
+		"caption": "Android: SDK Manager",
+		"command": "android_sdk_manager"
+	},
+	{
+		"caption": "Android: Monitor",
+		"command": "android_monitor"
+	},
+	{
+		"caption": "Android: Draw 9-patch",
+		"command": "android_draw_nine_patch"
+	},
+	{
+		"caption": "Android: Update Project",
+		"command": "android_update_project"
+	},
+	{
 		"caption": "Android: Reload Settings",
 		"command": "sublime_android_load_settings"
 	}

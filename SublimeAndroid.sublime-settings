@@ -1,4 +1,8 @@
 {
+	// Manual override for sdk dir, useful for launching sdk tools when no active android project
+	// is open.
+	"sublimeandroid_sdk_dir": "",
+	
 	// Manual override for project path, normally autodetected
 	"sublimeandroid_project_path": "",
 
