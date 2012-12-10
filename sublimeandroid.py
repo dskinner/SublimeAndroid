@@ -48,7 +48,7 @@ def logger(level):
     return log
 
 
-log = logger(logging.INFO)
+log = logger(logging.WARNING)
 
 
 class AndroidInstallRequiresCommand(packagemeta.PackageMetaInstallRequiresCommand):
