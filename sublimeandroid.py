@@ -129,10 +129,17 @@ def get_android_project_path():
     Returns:
         String pointing to absolute path of android project root.
     """
+    view = sublime.active_window().active_view()
+    if view is None:
+        return
+
+    settings_path = view.settings().get("sublimeandroid_project_path", "")
+    if settings_path:
+        return settings_path
+
     log.info("Searching for project path.")
 
     # Use active file to traverse upwards and locate project
-    view = sublime.active_window().active_view()
     if view is not None:
         file_name = view.file_name()
         if file_name:
@@ -141,6 +148,7 @@ def get_android_project_path():
             while dir_name != "/":
                 if os.path.isfile(os.path.join(dir_name, "AndroidManifest.xml")):
                     log.info("Found project from active file. %s", dir_name)
+                    view.settings().set("sublimeandroid_project_path", dir_name)
                     return dir_name
                 dir_name = os.path.abspath(os.path.join(dir_name, ".."))
 
@@ -424,23 +432,31 @@ def get_ant_project_name():
 
 
 @android
-def ant_build(view, device=None, target="debug", install=False, run=False, callback=None):
+def ant_build(view=None, args=None, device=None, target=None, install=False, run=False, verbose=False, callback=None):
+    if view is None:
+        view = sublime.active_window().active_view()
+    args = get_setting("sublimeandroid_ant_args")
+    target = get_setting("sublimeandroid_default_ant_target", "debug")
+    log.debug("ant_build received device %s", device)
     lock.acquire()
     try:
-        _ant_build(view, device, target, install, run, callback)
+        _ant_build(view, args, device, target, install, run, verbose, callback)
     finally:
         lock.release()
 
 
-def _ant_build(view, device, target, install, run, callback):
+def _ant_build(view, args, device, target, install, run, verbose, callback):
     # vars for installation of target
     adb = os.path.join(get_sdk_dir(), "platform-tools", "adb")
     name = "%s-debug.apk" % get_ant_project_name()
     apk = os.path.join(get_android_project_path(), "bin", name)
-    activity = get_android_activity_main()
+
+    activity = get_setting("sublimeandroid_default_activity", "")
+    if not activity:
+        activity = get_android_activity_main()
 
     #
-    cmd = "cd {working_dir} && ant debug".format(working_dir=get_android_project_path())
+    cmd = "cd {working_dir} && ant {args} {target}".format(working_dir=get_android_project_path(), args=args, target=target)
 
     if install:
         if device is None:
@@ -451,19 +467,26 @@ def _ant_build(view, device, target, install, run, callback):
             " && {adb} -s {device} install -r {apk}".format(adb=adb, device=device, apk=apk)
 
     if run:
-        cmd += " && {adb} -s {device} shell am start -n {activity}".format(activity=activity)
+        cmd += " && {adb} -s {device} shell am start -n {activity}".format(adb=adb, device=device, activity=activity)
 
     p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     view.set_status("SublimeAndroid", "Android: Building Project")
 
+    window = sublime.active_window()
+    if verbose:
+        window.run_command("show_panel", {"panel": "console"})
+
     def wait(p, view, callback):
-        p.wait()
-        stdout = p.stdout.read()
+        while p.poll() is None:
+            line = p.stdout.readline().rstrip("\n")
+            log.info(line)
+
         stderr = p.stderr.read()
-        log.debug(stdout)
-        log.debug(stderr)
+        log.info(stderr)
+
         view.erase_status("SublimeAndroid")
         log.debug("finished build")
+
         if callback is not None:
             callback()
 
@@ -563,7 +586,8 @@ class AndroidAntRunCommand(sublime_plugin.WindowCommand):
             return
 
         device = self.devices[picked]
-        ant_build(self.window.active_view(), device)
+        log.debug("selected device is %s", device)
+        ant_build(view=self.window.active_view(), device=device, install=True, run=True, verbose=True)
 
     def is_visible(self):
         return is_android_project()

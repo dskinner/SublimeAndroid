@@ -15,5 +15,16 @@
 
 	// For commands requiring a device selection and only one device is attached,
 	// select it without prompt.
-	"sublimeandroid_device_select_default": true
+	"sublimeandroid_device_select_default": true,
+
+	// Specify arguments to pass to ant
+	"sublimeandroid_ant_args": "",
+
+	// Select default ant target
+	"sublimeandroid_default_ant_target": "debug",
+
+	// Set default activity used for Run. Should be full path to activity, for example:
+	// com.domain.app/.HomeActivity
+	// If not set, default activity is parsed from AndroidManifest.xml
+	"sublimeandroid_default_activity": ""
 }
