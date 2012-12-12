@@ -36,6 +36,7 @@ import sublime
 import sublime_plugin
 
 packagemeta = imp.load_source("android_packagemeta", os.path.join("_packagemeta", "packagemeta.py"))
+lock = threading.Lock()
 
 
 def logger(level):
@@ -48,7 +49,7 @@ def logger(level):
     return log
 
 
-log = logger(logging.WARNING)
+log = logger(logging.DEBUG)
 
 
 class AndroidInstallRequiresCommand(packagemeta.PackageMetaInstallRequiresCommand):
@@ -86,6 +87,23 @@ def android(fn):
     return _android
 
 
+def check_settings(*settings):
+    """Decorator that checks given settings to affirm they're True.
+
+    Returns:
+        Wrapped function
+    """
+    def _decor(fn):
+        for setting in settings:
+            if not get_setting(setting):
+                return None
+
+        def _fn(*args, **kwargs):
+            return fn(*args, **kwargs)
+        return _fn
+    return _decor
+
+
 def is_android_project():
     """Determines if current sublime project contains an android project.
 
@@ -119,8 +137,8 @@ def get_android_project_path():
         file_name = view.file_name()
         if file_name:
             dir_name = os.path.dirname(file_name)
+            log.debug("Starting check for AndroidManifest.xml in %s", dir_name)
             while dir_name != "/":
-                log.debug("Checking for AndroidManifest.xml in %s", dir_name)
                 if os.path.isfile(os.path.join(dir_name, "AndroidManifest.xml")):
                     log.info("Found project from active file. %s", dir_name)
                     return dir_name
@@ -173,6 +191,15 @@ def get_android_activity_main():
 
 
 def get_classpaths():
+    """Get java class paths.
+
+    Use detected android project to determine absolute paths to
+    to java class paths.
+
+    Returns:
+        list of strings that are absolute paths to standard paths of android
+        projects.
+    """
     classpaths = []
     p = get_android_project_path()
     log.debug("Project path %s", p)
@@ -201,6 +228,14 @@ def get_classpaths():
 
 
 def get_srcpaths():
+    """Get java source paths.
+
+    Use detected android project to determine absolute paths to
+    java source files.
+
+    Returns:
+        list of strings that are absolute paths.
+    """
     p = get_android_project_path()
     srcpaths = [os.path.join(p, "src")]
     for lib in get_android_libs():
@@ -209,6 +244,11 @@ def get_srcpaths():
 
 
 def get_sdk_dir():
+    """Determine path of sdk dir.
+
+    Check if setting exists to point to sdk dir, otherwise use
+    local.properties of detected android project.
+    """
     sdk_dir = get_setting("sublimeandroid_sdk_dir", "")
     if sdk_dir:
         return sdk_dir
@@ -221,6 +261,14 @@ def get_sdk_dir():
 
 
 def get_target_platform():
+    """Get target platform.
+
+    Use detected android project path to read target platform from
+    project.properties
+
+    Returns:
+        String of target platform
+    """
     p = get_android_project_path()
     f = open(os.path.join(p, "project.properties"))
     s = f.read()
@@ -330,9 +378,23 @@ def load_settings_sublimelinter(settings):
     linter = settings.get("SublimeLinter", {})
     linter["Java"] = java
     settings.set("SublimeLinter", linter)
+    disable_sublimelinter_defaults(settings)
+
+
+@check_settings("sublimeandroid_auto_build")
+def disable_sublimelinter_defaults(settings):
+    """Disable sublimelinter if auto_build is enabled.
+
+    When auto_build is enabled, SublimeLinter should run after the build so
+    that class and gen folders are up to date. This disables the default
+    behaviour and sublimelinter is invoked manually after a build completes
+    later on.
+    """
+    settings.set("sublimelinter", False)
 
 
 @android
+@check_settings("sublimeandroid_auto_load_settings")
 def load_settings(view):
     """Automatically load settings for external packages.
 
@@ -345,9 +407,7 @@ def load_settings(view):
     and a package setting to disable warning.
     """
 
-    if not get_setting("sublimeandroid_auto_load_settings", True):
-        return
-
+    log.debug("reloading settings")
     settings = view.settings()
     load_settings_adbview(settings)
     load_settings_sublimejava(settings)
@@ -363,22 +423,51 @@ def get_ant_project_name():
     return name
 
 
-def auto_build(view):
-    if not is_android_project():
-        return
+@android
+def ant_build(view, device=None, target="debug", install=False, run=False, callback=None):
+    lock.acquire()
+    try:
+        _ant_build(view, device, target, install, run, callback)
+    finally:
+        lock.release()
 
-    if not get_setting("sublimeandroid_auto_build", True):
-        return
 
-    build_xml = os.path.join(get_android_project_path(), "build.xml")
-    p = subprocess.Popen(["ant", "-f", build_xml, "debug"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE)
+def _ant_build(view, device, target, install, run, callback):
+    # vars for installation of target
+    adb = os.path.join(get_sdk_dir(), "platform-tools", "adb")
+    name = "%s-debug.apk" % get_ant_project_name()
+    apk = os.path.join(get_android_project_path(), "bin", name)
+    activity = get_android_activity_main()
+
+    #
+    cmd = "cd {working_dir} && ant debug".format(working_dir=get_android_project_path())
+
+    if install:
+        if device is None:
+            raise Exception("install is True but device is None")
+
+        cmd += \
+            " && echo && echo Installing Package" + \
+            " && {adb} -s {device} install -r {apk}".format(adb=adb, device=device, apk=apk)
+
+    if run:
+        cmd += " && {adb} -s {device} shell am start -n {activity}".format(activity=activity)
+
+    p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     view.set_status("SublimeAndroid", "Android: Building Project")
 
-    def wait(p, view):
+    def wait(p, view, callback):
         p.wait()
+        stdout = p.stdout.read()
+        stderr = p.stderr.read()
+        log.debug(stdout)
+        log.debug(stderr)
         view.erase_status("SublimeAndroid")
+        log.debug("finished build")
+        if callback is not None:
+            callback()
 
-    threading.Thread(target=wait, args=(p, view)).start()
+    threading.Thread(target=wait, args=(p, view, callback)).start()
 
 
 def exec_sdk_tool(cmd=[], panel=False):
@@ -402,8 +491,22 @@ class SublimeAndroidAuto(sublime_plugin.EventListener):
         load_settings(view)
 
     def on_post_save(self, view):
-        auto_build(view)
         load_settings(view)
+        self.auto_build(view)
+
+    @packagemeta.requires("SublimeLinter")
+    def lint(self, view):
+        import SublimeLinter
+        SublimeLinter.reload_view_module(view)
+        linter = SublimeLinter.select_linter(view)
+        SublimeLinter.queue_linter(linter, view, preemptive=True, event='on_post_save')
+
+    @check_settings("sublimeandroid_auto_build")
+    def auto_build(self, view):
+        def callback():
+            log.debug("calling SublimeLinter")
+            self.lint(view)
+        ant_build(view, callback=callback)
 
 
 class SublimeAndroidLoadSettingsCommand(sublime_plugin.WindowCommand):
@@ -444,7 +547,7 @@ class AndroidAntRunCommand(sublime_plugin.WindowCommand):
 
     This is similar to ctrl+F11 in eclipse/ADT.
     """
-    def run(self):
+    def run(self, device=None):
         devices, options = get_adb_devices()
         self.devices = devices
 
@@ -460,24 +563,7 @@ class AndroidAntRunCommand(sublime_plugin.WindowCommand):
             return
 
         device = self.devices[picked]
-        adb = os.path.join(get_sdk_dir(), "platform-tools", "adb")
-
-        name = "%s-debug.apk" % get_ant_project_name()
-        apk = os.path.join(get_android_project_path(), "bin", name)
-
-        activity = get_android_activity_main()
-
-        cmd = \
-            "ant debug && " + \
-            "echo && echo Installing Package && " + \
-            "{adb} -s {device} install -r {apk} && " + \
-            "{adb} -s {device} shell am start -n {activity}"
-
-        self.window.run_command("exec", {
-            "cmd": [cmd.format(adb=adb, device=device, apk=apk, activity=activity)],
-            "working_dir": get_android_project_path(),
-            "shell": True
-        })
+        ant_build(self.window.active_view(), device)
 
     def is_visible(self):
         return is_android_project()
