@@ -81,10 +81,10 @@ def android(fn):
     Returns:
         Wrapped function
     """
-    def _android(*args, **kwargs):
+    def _fn(*args, **kwargs):
         if is_android_project():
             return fn(*args, **kwargs)
-    return _android
+    return _fn
 
 
 def check_settings(*settings):
@@ -94,11 +94,10 @@ def check_settings(*settings):
         Wrapped function
     """
     def _decor(fn):
-        for setting in settings:
-            if not get_setting(setting):
-                return None
-
         def _fn(*args, **kwargs):
+            for setting in settings:
+                if not get_setting(setting):
+                    return
             return fn(*args, **kwargs)
         return _fn
     return _decor
@@ -518,6 +517,7 @@ class SublimeAndroidAuto(sublime_plugin.EventListener):
         self.auto_build(view)
 
     @packagemeta.requires("SublimeLinter")
+    @check_settings("sublimeandroid_auto_build")
     def lint(self, view):
         import SublimeLinter
         SublimeLinter.reload_view_module(view)
