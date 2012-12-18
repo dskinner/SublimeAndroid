@@ -34,5 +34,13 @@
 	{
 		"caption": "Android: Install Dependencies",
 		"command": "android_install_requires"
+	},
+	{
+		"caption": "Android: Toggle Auto Build",
+		"command": "sublime_android_toggle_auto"
+	},
+	{
+		"caption": "Android: Install Support Library",
+		"command": "android_install_support_library"
 	}
 ]

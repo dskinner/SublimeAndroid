@@ -26,6 +26,7 @@ import imp
 import logging
 import os.path
 import re
+import shutil
 import subprocess
 import telnetlib
 import threading
@@ -43,7 +44,7 @@ def logger(level):
     sh = logging.StreamHandler()
     sh.setLevel(logging.DEBUG)
     sh.setFormatter(logging.Formatter('%(levelname)s:%(name)s:%(message)s'))
-    log = logging.getLogger("SublimeAndroid")
+    log = logging.getLogger(__name__)
     log.setLevel(level)
     log.addHandler(sh)
     return log
@@ -145,7 +146,9 @@ def get_android_project_path():
             dir_name = os.path.dirname(file_name)
             log.debug("Starting check for AndroidManifest.xml in %s", dir_name)
             while dir_name != "/":
-                if os.path.isfile(os.path.join(dir_name, "AndroidManifest.xml")):
+                android_manifest = os.path.join(dir_name, "AndroidManifest.xml")
+                project_properties = os.path.join(dir_name, "project.properties")
+                if os.path.isfile(android_manifest) and os.path.isfile(project_properties):
                     log.info("Found project from active file. %s", dir_name)
                     view.settings().set("sublimeandroid_project_path", dir_name)
                     return dir_name
@@ -532,6 +535,13 @@ class SublimeAndroidAuto(sublime_plugin.EventListener):
         ant_build(view, callback=callback)
 
 
+class SublimeAndroidToggleAutoCommand(sublime_plugin.WindowCommand):
+    def run(self):
+        auto = not get_setting("sublimeandroid_auto_build", True)
+        log.debug("Setting auto build value to %s", auto)
+        self.window.active_view().settings().set("sublimeandroid_auto_build", auto)
+
+
 class SublimeAndroidLoadSettingsCommand(sublime_plugin.WindowCommand):
     def run(self):
         load_settings(sublime_plugin.active_window().active_view())
@@ -562,6 +572,50 @@ class AndroidUpdateProjectCommand(sublime_plugin.WindowCommand):
         exec_sdk_tool(cmd=["android", "update", "project", "-p", get_android_project_path()], panel=True)
 
     def is_visible(self):
+        return is_android_project()
+
+
+class AndroidInstallSupportLibrary(sublime_plugin.WindowCommand):
+    def run(self):
+        support = os.path.join(get_sdk_dir(), "extras", "android", "support")
+        if not os.path.exists(support):
+            sublime.error_message("Support libraries are not installed.")
+            return
+
+        self.support_libs = []
+        self.options = []
+
+        for d in [d for d in os.listdir(support) if re.match(r"v[0-9]*", d) is not None]:
+            path = os.path.join(support, d)
+            print "checking:", path
+            for root, dirs, files in os.walk(path):
+                if self.match_files(root, files):
+                    break
+
+        self.window.show_quick_panel(self.options, self.on_done)
+
+    def match_files(self, root, files):
+        for f in files:
+            if re.match(r"android.*\.jar$", f) is not None:
+                self.support_libs.append(os.path.join(root, f))
+                self.options.append(f)
+                return True
+        return False
+
+    def on_done(self, picked):
+        if picked == -1:
+            return
+
+        f = self.support_libs[picked]
+        libs = os.path.join(get_android_project_path(), "libs")
+        if not os.path.exists(libs):
+            os.mkdir(libs)
+        shutil.copy2(f, libs)
+
+    def is_visible(self):
+        return is_android_project()
+
+    def is_enabled(self):
         return is_android_project()
 
 
