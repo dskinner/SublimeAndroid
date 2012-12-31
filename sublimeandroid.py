@@ -37,7 +37,7 @@ import sublime
 import sublime_plugin
 
 packagemeta = imp.load_source("android_packagemeta", os.path.join("_packagemeta", "packagemeta.py"))
-lock = threading.Lock()
+ant_build_proc = None
 
 
 def logger(level):
@@ -362,17 +362,20 @@ def get_adb_devices():
     return devices, options
 
 
+@android
 @packagemeta.requires("ADBView")
 def load_settings_adbview(settings):
     settings.set("adb_command", os.path.join(get_sdk_dir(), "platform-tools", "adb"))
 
 
+@android
 @packagemeta.requires("SublimeJava")
 def load_settings_sublimejava(settings):
     settings.set("sublimejava_classpath", get_classpaths())
     settings.set("sublimejava_srcpath", get_srcpaths())
 
 
+@android
 @packagemeta.requires("SublimeLinter")
 def load_settings_sublimelinter(settings):
     java = {
@@ -391,6 +394,7 @@ def load_settings_sublimelinter(settings):
     disable_sublimelinter_defaults(settings)
 
 
+@android
 @check_settings("sublimeandroid_auto_build")
 def disable_sublimelinter_defaults(settings):
     """Disable sublimelinter if auto_build is enabled.
@@ -440,11 +444,7 @@ def ant_build(view=None, args=None, device=None, target=None, install=False, run
     args = get_setting("sublimeandroid_ant_args")
     target = get_setting("sublimeandroid_default_ant_target", "debug")
     log.debug("ant_build received device %s", device)
-    lock.acquire()
-    try:
-        _ant_build(view, args, device, target, install, run, verbose, callback)
-    finally:
-        lock.release()
+    _ant_build(view, args, device, target, install, run, verbose, callback)
 
 
 def _ant_build(view, args, device, target, install, run, verbose, callback):
@@ -471,28 +471,45 @@ def _ant_build(view, args, device, target, install, run, verbose, callback):
     if run:
         cmd += " && {adb} -s {device} shell am start -n {activity}".format(adb=adb, device=device, activity=activity)
 
-    p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    view.set_status("SublimeAndroid", "Android: Building Project")
+    def start():
+        global ant_build_proc
 
-    window = sublime.active_window()
-    if verbose:
-        window.run_command("show_panel", {"panel": "console"})
+        if ant_build_proc is not None:
+            ant_build_proc.kill()
+            ant_build_proc.wait()
 
-    def wait(p, view, callback):
-        while p.poll() is None:
-            line = p.stdout.readline().rstrip("\n")
-            log.info(line)
+        ant_build_proc = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        view.set_status("SublimeAndroid", "Android: Building Project")
 
-        stderr = p.stderr.read()
-        log.info(stderr)
+        window = sublime.active_window()
+        if verbose:
+            window.run_command("show_panel", {"panel": "console"})
 
-        view.erase_status("SublimeAndroid")
-        log.debug("finished build")
+        def wait(view, callback):
+            global ant_build_proc
 
-        if callback is not None:
-            callback()
+            lines = []
 
-    threading.Thread(target=wait, args=(p, view, callback)).start()
+            while ant_build_proc is not None and ant_build_proc.poll() is None:
+                line = ant_build_proc.stdout.readline().rstrip("\n")
+                lines.append(line)
+
+            log.info("\n".join(lines))
+
+            if ant_build_proc is not None:
+                stderr = ant_build_proc.stderr.read()
+                log.info(stderr)
+
+            view.erase_status("SublimeAndroid")
+            log.debug("finished build")
+            ant_build_proc = None
+
+            if callback is not None:
+                callback()
+
+        threading.Thread(target=wait, args=(view, callback)).start()
+
+    threading.Thread(target=start).start()
 
 
 def exec_sdk_tool(cmd=[], panel=False):
@@ -509,16 +526,20 @@ class SublimeAndroidAuto(sublime_plugin.EventListener):
 
     Settings are configured on multiple hooks to keep up with class path changes.
     """
+    @android
     def on_load(self, view):
         load_settings(view)
 
+    @android
     def on_new(self, view):
         load_settings(view)
 
+    @android
     def on_post_save(self, view):
         load_settings(view)
         self.auto_build(view)
 
+    @android
     @packagemeta.requires("SublimeLinter")
     @check_settings("sublimeandroid_auto_build")
     def lint(self, view):
@@ -541,10 +562,16 @@ class SublimeAndroidToggleAutoCommand(sublime_plugin.WindowCommand):
         log.debug("Setting auto build value to %s", auto)
         self.window.active_view().settings().set("sublimeandroid_auto_build", auto)
 
+    def is_visible(self):
+        return is_android_project()
+
 
 class SublimeAndroidLoadSettingsCommand(sublime_plugin.WindowCommand):
     def run(self):
         load_settings(sublime_plugin.active_window().active_view())
+
+    def is_visible(self):
+        return is_android_project()
 
 
 class AndroidAvdManagerCommand(sublime_plugin.WindowCommand):
@@ -565,6 +592,59 @@ class AndroidMonitorCommand(sublime_plugin.WindowCommand):
 class AndroidDrawNinePatchCommand(sublime_plugin.WindowCommand):
     def run(self):
         exec_sdk_tool(cmd=["draw9patch"])
+
+
+create_project_buffer = """
+--target <target-id>
+
+--name MyApp
+
+--path ./
+
+--activity MainActivity
+
+--package com.example.app
+"""
+
+
+class AndroidCreateProjectCommand(sublime_plugin.WindowCommand):
+    def run(self):
+        view = self.window.new_file()
+        view.set_name("Create Android Project")
+        view.set_scratch(True)
+        edit = view.begin_edit()
+        buf = create_project_buffer
+        android = os.path.join(get_sdk_dir(), "tools", "android")
+        p = subprocess.Popen([android, "list", "targets"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        stdout = p.stdout.readlines()
+        targets = "".join([line.replace(" or", "") for line in stdout if line.startswith("id:")])
+        buf = targets + buf
+        view.insert(edit, 0, buf)
+        view.end_edit(edit)
+
+
+class AndroidCreateProjectListener(sublime_plugin.EventListener):
+    def on_close(self, view):
+        if view.name() == "Create Android Project":
+            data = view.substr(sublime.Region(0, view.size()))
+            args = ["create", "project"]
+            for line in data.split("\n"):
+                if not line.startswith("--"):
+                    continue
+
+                if line.startswith("--path"):
+                    path = line.split(" ", 1)[1]
+                    path = os.path.join(sublime.active_window().folders()[0], path)
+                    line = "--path " + path
+                args.append(line.rstrip())
+            android = os.path.join(get_sdk_dir(), "tools", "android")
+            cmd = " ".join([android] + args)
+            log.info("running: %s", cmd)
+            p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            stdout = p.stdout.read()
+            log.info(stdout)
+            stderr = p.stderr.read()
+            log.info(stderr)
 
 
 class AndroidUpdateProjectCommand(sublime_plugin.WindowCommand):

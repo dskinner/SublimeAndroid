@@ -24,6 +24,10 @@
 		"command": "android_draw_nine_patch"
 	},
 	{
+		"caption": "Android: Create Project",
+		"command": "android_create_project"
+	},
+	{
 		"caption": "Android: Update Project",
 		"command": "android_update_project"
 	},
