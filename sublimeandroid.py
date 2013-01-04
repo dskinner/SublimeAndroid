@@ -36,6 +36,9 @@ from xml.etree import ElementTree as ET
 import sublime
 import sublime_plugin
 
+# only has effect if set to False, True does not override settings
+should_auto_build = True
+
 packagemeta = imp.load_source("android_packagemeta", os.path.join("_packagemeta", "packagemeta.py"))
 ant_build_proc = None
 
@@ -76,16 +79,18 @@ def get_setting(key, default=None):
     return _settings.get(key, default)
 
 
-def android(fn):
+def android():
     """Decorator to execute fn only if android project detected.
 
     Returns:
         Wrapped function
     """
-    def _fn(*args, **kwargs):
-        if is_android_project():
-            return fn(*args, **kwargs)
-    return _fn
+    def _decor(fn):
+        def _fn(*args, **kwargs):
+            if is_android_project():
+                return fn(*args, **kwargs)
+        return _fn
+    return _decor
 
 
 def check_settings(*settings):
@@ -137,19 +142,18 @@ def get_android_project_path():
     if settings_path:
         return settings_path
 
-    log.info("Searching for project path.")
+    # log.info("Searching for project path.")
 
     # Use active file to traverse upwards and locate project
     if view is not None:
         file_name = view.file_name()
         if file_name:
             dir_name = os.path.dirname(file_name)
-            log.debug("Starting check for AndroidManifest.xml in %s", dir_name)
             while dir_name != "/":
                 android_manifest = os.path.join(dir_name, "AndroidManifest.xml")
                 project_properties = os.path.join(dir_name, "project.properties")
                 if os.path.isfile(android_manifest) and os.path.isfile(project_properties):
-                    log.info("Found project from active file. %s", dir_name)
+                    log.info("Found project from active file %s. %s", view.file_name(), dir_name)
                     view.settings().set("sublimeandroid_project_path", dir_name)
                     return dir_name
                 dir_name = os.path.abspath(os.path.join(dir_name, ".."))
@@ -404,7 +408,8 @@ def disable_sublimelinter_defaults(settings):
     behaviour and sublimelinter is invoked manually after a build completes
     later on.
     """
-    settings.set("sublimelinter", False)
+    if should_auto_build:
+        settings.set("sublimelinter", False)
 
 
 @android
@@ -421,7 +426,7 @@ def load_settings(view):
     and a package setting to disable warning.
     """
 
-    log.debug("reloading settings")
+    log.debug("reloading settings based on view for %s.", view.file_name())
     settings = view.settings()
     load_settings_adbview(settings)
     load_settings_sublimejava(settings)
@@ -440,7 +445,7 @@ def get_ant_project_name():
 @android
 def ant_build(view=None, args=None, device=None, target=None, install=False, run=False, verbose=False, callback=None):
     if view is None:
-        view = sublime.active_window().active_view()
+        return  # view = sublime.active_window().active_view()
     args = get_setting("sublimeandroid_ant_args")
     target = get_setting("sublimeandroid_default_ant_target", "debug")
     log.debug("ant_build received device %s", device)
@@ -488,17 +493,15 @@ def _ant_build(view, args, device, target, install, run, verbose, callback):
         def wait(view, callback):
             global ant_build_proc
 
-            lines = []
-
             while ant_build_proc is not None and ant_build_proc.poll() is None:
                 line = ant_build_proc.stdout.readline().rstrip("\n")
-                lines.append(line)
+                log.info(line)
 
-            log.info("\n".join(lines))
-
+            """
             if ant_build_proc is not None:
                 stderr = ant_build_proc.stderr.read()
                 log.info(stderr)
+            """
 
             view.erase_status("SublimeAndroid")
             log.debug("finished build")
@@ -550,6 +553,9 @@ class SublimeAndroidAuto(sublime_plugin.EventListener):
 
     @check_settings("sublimeandroid_auto_build")
     def auto_build(self, view):
+        if not should_auto_build:
+            return
+
         def callback():
             log.debug("calling SublimeLinter")
             self.lint(view)
@@ -558,9 +564,12 @@ class SublimeAndroidAuto(sublime_plugin.EventListener):
 
 class SublimeAndroidToggleAutoCommand(sublime_plugin.WindowCommand):
     def run(self):
-        auto = not get_setting("sublimeandroid_auto_build", True)
-        log.debug("Setting auto build value to %s", auto)
-        self.window.active_view().settings().set("sublimeandroid_auto_build", auto)
+        global should_auto_build
+        # auto = not get_setting("sublimeandroid_auto_build", True)
+        should_auto_build = not should_auto_build
+        log.debug("Setting auto build value to %s", should_auto_build)
+        load_settings(sublime.active_window().active_view())
+        # self.window.active_view().settings().set("sublimeandroid_auto_build", auto)
 
     def is_visible(self):
         return is_android_project()
