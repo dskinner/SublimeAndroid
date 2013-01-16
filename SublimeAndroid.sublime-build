@@ -1,0 +1,4 @@
+{
+	"selector": "source.java",
+	"target": "android_ant_build"
+}

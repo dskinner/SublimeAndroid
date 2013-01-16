@@ -33,7 +33,7 @@
 	},
 	{
 		"caption": "Android: Reload Settings",
-		"command": "sublime_android_load_settings"
+		"command": "android_load_settings"
 	},
 	{
 		"caption": "Android: Install Dependencies",
@@ -41,7 +41,7 @@
 	},
 	{
 		"caption": "Android: Toggle Auto Build",
-		"command": "sublime_android_toggle_auto"
+		"command": "android_toggle_auto"
 	},
 	{
 		"caption": "Android: Install Support Library",

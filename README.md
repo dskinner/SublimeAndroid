@@ -36,3 +36,23 @@ git submodule update
 * Identifies project directory and target platform for autocompletion.
 * XML autocompletion (incomplete) in layouts for tags, attributes and values.
 * Identifies multiple android projects in a sublime project.
+* Build commands for ant
+* Launch sdk tools
+
+## Setup automatic builds
+
+### Ant
+
+Create a new target in `custom_rules.xml`:
+
+```xml
+<target name="compile" depends="-compile"/>
+```
+
+Add the following to sublime project settings
+
+```
+"sublimeandroid_default_ant_target": "compile"
+```
+
+This will perform just enough to allow for quick builds and provide autocompletion via SublimeJava
