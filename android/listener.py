@@ -3,7 +3,9 @@ import sublime_plugin
 
 import project
 import settings
-from util import check_settings, log, packagemeta
+from util import check_settings, logger, packagemeta
+
+log = logger(__name__)
 
 
 class AndroidAuto(sublime_plugin.EventListener):

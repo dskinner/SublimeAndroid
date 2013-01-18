@@ -3,7 +3,9 @@ import os
 import sublime_plugin
 
 import project
-from util import check_settings, log, packagemeta
+from util import check_settings, logger, packagemeta
+
+log = logger(__name__)
 
 
 @packagemeta.requires("ADBView")
@@ -25,6 +27,8 @@ def load_sublimelinter(settings):
             "-d", "bin/classes",
             "-sourcepath", "src",
             "-classpath", ":".join(project.get_classpaths()),
+            "-source", "1.6",
+            "-target", "1.6",
             "-Xlint",
             "{filename}"
         ]

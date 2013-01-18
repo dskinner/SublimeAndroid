@@ -7,7 +7,9 @@ import sublime
 import sublime_plugin
 
 import project
-from util import log
+from util import logger
+
+log = logger(__name__)
 
 
 def exec_tool(cmd=[], panel=False):

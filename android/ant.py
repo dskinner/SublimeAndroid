@@ -5,7 +5,9 @@ from xml.etree import ElementTree as ET
 import sublime_plugin
 
 import project
-from util import get_setting, log
+from util import get_setting, logger
+
+log = logger(__name__)
 
 
 def get_project_name():
@@ -27,6 +29,7 @@ class AndroidAntBuildCommand(sublime_plugin.WindowCommand):
     Parses the project's build.xml including any imports specified to locate all
     build targets and then provides a quick panel for selecting the desired target.
     """
+
     def run(self):
         build_xml = os.path.join(project.get_path(), "build.xml")
         self.targets = self.get_targets(build_xml)
@@ -41,11 +44,16 @@ class AndroidAntBuildCommand(sublime_plugin.WindowCommand):
         if picked == -1:
             return
 
-        if picked == 0:  # Build, Install, Run
+        install_and_run = False
+
+        if picked == 0:
             target = "debug"
+            install_and_run = True
         else:
             picked -= 1
             target = sorted(self.targets)[picked]
+
+        log.debug("picked %s, target %s", picked, target)
 
         opts = {
             "cmd": ["ant", target],
@@ -53,9 +61,9 @@ class AndroidAntBuildCommand(sublime_plugin.WindowCommand):
         }
         self.window.run_command("android_exec", opts)
 
-        if picked == 0:
-            log.warn("HOLY FUCKING SHIT!!!!!!!!!!!!!")
-            # self.window.run_command("android_select_device", {"callbacks": ["android_ant_install", "android_ant_run"]})
+        if install_and_run:
+            log.debug("target is %s and calling install and run.", target)
+            self.window.run_command("android_select_device", {"callbacks": ["android_ant_install", "android_ant_run"]})
 
     def get_targets(self, path, targets={}):
         """Gets list of ANT targets
@@ -66,7 +74,7 @@ class AndroidAntBuildCommand(sublime_plugin.WindowCommand):
             A dict containing keys of all ANT targets and values being the target's
             description.
         """
-        log.debug("checking path:", path)
+        log.debug("checking path: %s", path)
         # return in cases where path is not valid. this may occur when the build.xml
         # stubs imports for custom rules that may not have been implemented.
         if not os.path.isfile(path):
@@ -91,7 +99,7 @@ class AndroidAntBuildCommand(sublime_plugin.WindowCommand):
             #
             # TODO should load property files for more complex build.xml files
             # to determine appropriate paths with referenced ant vars.
-            log.debug("found import with file attr:", f)
+            log.debug("found import with file attr: %s", f)
             if f.startswith("${sdk.dir"):
                 f = f.replace("${sdk.dir}", project.get_sdk_dir())
 

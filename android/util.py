@@ -12,17 +12,17 @@ packagemeta = imp.load_source("android_packagemeta", os.path.join("_packagemeta"
 sublime_exec = imp.load_source("sublime_exec", os.path.join(sublime.packages_path(), "Default", "exec.py"))
 
 
-def logger(level):
+def logger(name, level=logging.DEBUG):
     sh = logging.StreamHandler()
     sh.setLevel(logging.DEBUG)
     sh.setFormatter(logging.Formatter('%(levelname)s:%(name)s:%(message)s'))
-    log = logging.getLogger(__name__)
+    log = logging.getLogger(name)
     log.setLevel(level)
     log.addHandler(sh)
     return log
 
 
-log = logger(logging.ERROR)
+log = logger(__name__)
 
 _settings = None
 

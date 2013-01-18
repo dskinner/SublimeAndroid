@@ -8,7 +8,9 @@ import sublime
 import sublime_plugin
 
 import project
-from util import get_setting, log
+from util import get_setting, logger
+
+log = logger(__name__)
 
 
 def get_devices():
