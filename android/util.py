@@ -5,7 +5,7 @@ import re
 
 import sublime
 
-from .. import _packagemeta as packagemeta
+from .. import packagemeta
 
 import Default.exec as sublime_exec
 
