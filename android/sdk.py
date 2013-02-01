@@ -6,8 +6,8 @@ import subprocess
 import sublime
 import sublime_plugin
 
-import project
-from util import logger
+from . import project
+from .util import logger
 
 log = logger(__name__)
 
@@ -113,7 +113,7 @@ class AndroidInstallSupportLibrary(sublime_plugin.WindowCommand):
 
         for d in [d for d in os.listdir(support) if re.match(r"v[0-9]*", d) is not None]:
             path = os.path.join(support, d)
-            print "checking:", path
+            print("checking:", path)
             for root, dirs, files in os.walk(path):
                 if self.match_files(root, files):
                     break

@@ -4,8 +4,8 @@ from xml.etree import ElementTree as ET
 
 import sublime_plugin
 
-import project
-from util import get_setting, logger
+from . import project
+from .util import get_setting, logger
 
 log = logger(__name__)
 

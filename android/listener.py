@@ -1,9 +1,9 @@
 import sublime
 import sublime_plugin
 
-import project
-import settings
-from util import check_settings, logger, packagemeta
+from . import project
+from . import settings
+from .util import check_settings, logger, packagemeta
 
 log = logger(__name__)
 

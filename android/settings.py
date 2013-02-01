@@ -2,8 +2,8 @@ import os
 
 import sublime_plugin
 
-import project
-from util import check_settings, logger, packagemeta
+from . import project
+from .util import check_settings, logger, packagemeta
 
 log = logger(__name__)
 

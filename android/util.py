@@ -5,12 +5,9 @@ import re
 
 import sublime
 
-# manage external dependencies
-packagemeta = imp.load_source("android_packagemeta", os.path.join("_packagemeta", "packagemeta.py"))
+from .. import _packagemeta as packagemeta
 
-# inject Packages/Default/exec.py
-sublime_exec = imp.load_source("sublime_exec", os.path.join(sublime.packages_path(), "Default", "exec.py"))
-
+import Default.exec as sublime_exec
 
 def logger(name, level=logging.DEBUG):
     sh = logging.StreamHandler()

@@ -5,7 +5,7 @@ from xml.etree import ElementTree as ET
 import sublime
 import sublime_plugin
 
-import project
+from . import project
 
 
 class AndroidXmlComplete(sublime_plugin.EventListener):
@@ -21,7 +21,7 @@ class AndroidXmlComplete(sublime_plugin.EventListener):
 
         line = view.substr(sublime.Region(view.full_line(locations[0]).begin(), locations[0])).strip()
         if line == "<":
-            keys = [(k, k) for k in self.lookup.keys() if k.lower().startswith(prefix.lower())]
+            keys = [(k, k) for k in list(self.lookup.keys()) if k.lower().startswith(prefix.lower())]
             return (keys, sublime.INHIBIT_WORD_COMPLETIONS | sublime.INHIBIT_EXPLICIT_COMPLETIONS)
 
         part = line.rsplit(" ")[-1].strip()  # BUG this would flunk on string values with spaces
@@ -34,11 +34,11 @@ class AndroidXmlComplete(sublime_plugin.EventListener):
             # TODO cache all this searching during initial load
             # match el and el_*
             for e in self.match_keys(el):
-                keys += [(k, "%s=\"$0\"" % k) for k in self.lookup[e].keys()]
+                keys += [(k, "%s=\"$0\"" % k) for k in list(self.lookup[e].keys())]
 
             for parent in self.widgets[el]:
                 for e in self.match_keys(parent):
-                    keys += [(k, "%s=\"$0\"" % k) for k in self.lookup[e].keys()]
+                    keys += [(k, "%s=\"$0\"" % k) for k in list(self.lookup[e].keys())]
             #
 
             self.dirty = True  # trigger to provide further completions to value
@@ -80,7 +80,7 @@ class AndroidXmlComplete(sublime_plugin.EventListener):
             List of strings where each value maps to self.lookup keys.
         """
         keys = []
-        for e in self.lookup.keys():
+        for e in list(self.lookup.keys()):
             if e == key or e.startswith(key + "_"):
                 keys.append(e)
         return keys

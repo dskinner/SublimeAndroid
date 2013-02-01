@@ -1,6 +1,6 @@
 # SublimeAndroid
 
-This is a work in progress!
+This is a work in progress for SublimeText 3!
 
 Expects a properly configured android project via sdk command line tools. From
 project directory:
