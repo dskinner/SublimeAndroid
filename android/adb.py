@@ -34,6 +34,7 @@ def get_devices():
         return
     # get list of device ids
     devices = []
+    out = str(out, "utf-8")
     for line in out.split("\n"):
         line = line.strip()
         if line not in ["", "List of devices attached"]:
@@ -44,15 +45,15 @@ def get_devices():
         # dump build.prop
         cmd = [adb, "-s", device, "shell", "cat /system/build.prop"]
         proc = subprocess.Popen(cmd, shell=False, stdout=subprocess.PIPE)
-        build_prop = proc.stdout.read().strip()
+        build_prop = str(proc.stdout.read().strip(), "utf-8")
         # get name
         product = "Unknown"  # should never actually see this
         if device.startswith("emulator"):
             port = device.rsplit("-")[-1]
             t = telnetlib.Telnet("localhost", port)
-            t.read_until("OK", 1000)
-            t.write("avd name\n")
-            product = t.read_until("OK", 1000)
+            t.read_until(b"OK", 1000)
+            t.write(b"avd name\n")
+            product = str(t.read_until(b"OK", 1000), "utf-8")
             t.close()
             product = product.replace("OK", "").strip()
         else:

@@ -1,5 +1,10 @@
 # SublimeAndroid
 
+## NOTICE
+
+This project is currently on hold (not discontinued) as much of the functionality
+for completions are being continued here: https://github.com/quarnster/completion
+
 This is a work in progress for SublimeText 3!
 
 Expects a properly configured android project via sdk command line tools. From
@@ -46,7 +51,7 @@ git submodule update
 Create a new target in `custom_rules.xml`:
 
 ```xml
-<target name="compile" depends="-compile"/>
+<target name="compile" depends="-set-debug-mode, -compile"/>
 ```
 
 Add the following to sublime project settings

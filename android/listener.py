@@ -3,7 +3,7 @@ import sublime_plugin
 
 from . import project
 from . import settings
-from .util import check_settings, logger, packagemeta
+from .util import check_settings, get_setting, logger, packagemeta
 
 log = logger(__name__)
 
@@ -37,14 +37,8 @@ class AndroidAuto(sublime_plugin.EventListener):
 
     @check_settings("sublimeandroid_auto_build")
     def auto_build(self, view):
-        # TODO
-        # if not should_auto_build:
-        #     return
-
-        def callback():
-            log.debug("calling SublimeLinter")
-            self.lint(view)
-        # ant_build(view, callback=callback, verbose=True)
+        target = get_setting("sublimeandroid_default_ant_target", "debug")
+        sublime.active_window().run_command("android_ant_build", {"target": target, "quiet": True})
 
 
 class AndroidToggleAutoCommand(sublime_plugin.WindowCommand):

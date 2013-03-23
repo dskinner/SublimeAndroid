@@ -30,7 +30,7 @@ class AndroidAntBuildCommand(sublime_plugin.WindowCommand):
     build targets and then provides a quick panel for selecting the desired target.
     """
 
-    def run(self):
+    def run(self, target=None, quiet=False):
         build_xml = os.path.join(project.get_path(), "build.xml")
         self.targets = self.get_targets(build_xml)
 
@@ -38,7 +38,11 @@ class AndroidAntBuildCommand(sublime_plugin.WindowCommand):
         for k in sorted(self.targets):
             options.append("{0} - {1}".format(k.title(), self.targets[k]))
 
-        self.window.show_quick_panel(options, self.on_done)
+        log.info("Received target %s", target)
+        if target in self.targets:
+            self.build(target, quiet=quiet)
+        else:
+            self.window.show_quick_panel(options, self.on_done)
 
     def on_done(self, picked):
         if picked == -1:
@@ -53,10 +57,12 @@ class AndroidAntBuildCommand(sublime_plugin.WindowCommand):
             picked -= 1
             target = sorted(self.targets)[picked]
 
-        log.debug("picked %s, target %s", picked, target)
+        self.build(target, install_and_run=install_and_run)
 
+    def build(self, target, quiet=False, install_and_run=False):
         opts = {
             "cmd": ["ant", target],
+            "quiet": True,
             "working_dir": project.get_path()
         }
         self.window.run_command("android_exec", opts)
